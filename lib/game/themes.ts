@@ -1,3 +1,5 @@
+import { ParticleSystem, emitEmbers, emitPixels, emitShockwave, emitPetals, emitSquares } from './particles';
+
 export type ThemeId = 'default' | 'retro' | 'minimalist' | 'neon' | 'pastel';
 
 export interface GameTheme {
@@ -28,9 +30,23 @@ export interface GameTheme {
   // Overlays
   overlayBg: string;
   overlayText: string;
+  // ── Particle / effect hooks ──────────────────────────────────────────────
+  /** Called when a ball scores (falls into a wall). x/y = ball position. */
+  onBallScore?: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
+  /** Called when a ball hits a paddle. x/y = contact point. */
+  onBallHit?: (ctx: CanvasRenderingContext2D, x: number, y: number) => void;
+  /** Called every frame AFTER the main render. Use for persistent particle systems. */
+  onUpdate?: (ctx: CanvasRenderingContext2D) => void;
   overlayFont: string;
   // Scanlines effect
   scanlines: boolean;
+}
+
+// ─── Per-theme particle systems (one instance per theme, created lazily) ──────
+const _ps: Partial<Record<ThemeId, ParticleSystem>> = {};
+function ps(id: ThemeId): ParticleSystem {
+  if (!_ps[id]) _ps[id] = new ParticleSystem();
+  return _ps[id]!;
 }
 
 export const THEMES: Record<ThemeId, GameTheme> = {
@@ -56,6 +72,9 @@ export const THEMES: Record<ThemeId, GameTheme> = {
     overlayText: '#ffffff',
     overlayFont: 'bold 56px sans-serif',
     scanlines: false,
+    onBallScore: (_ctx, x, y) => emitEmbers(ps('default'), x, y, '#facc15', 28),
+    onBallHit:   (_ctx, x, y) => emitEmbers(ps('default'), x, y, '#94a3b8', 10),
+    onUpdate: (ctx) => { ps('default').update(ctx); },
   },
 
   retro: {
@@ -80,6 +99,9 @@ export const THEMES: Record<ThemeId, GameTheme> = {
     overlayText: '#00ff41',
     overlayFont: 'bold 56px "Courier New", monospace',
     scanlines: true,
+    onBallScore: (_ctx, x, y) => emitPixels(ps('retro'), x, y, '#00ff41', 24),
+    onBallHit:   (_ctx, x, y) => emitPixels(ps('retro'), x, y, '#00cc33', 8),
+    onUpdate: (ctx) => { ps('retro').update(ctx); },
   },
 
   minimalist: {
@@ -104,6 +126,9 @@ export const THEMES: Record<ThemeId, GameTheme> = {
     overlayText: '#000000',
     overlayFont: 'bold 56px "Helvetica Neue", sans-serif',
     scanlines: false,
+    onBallScore: (_ctx, x, y) => emitSquares(ps('minimalist'), x, y, '#000000', 16),
+    onBallHit:   (_ctx, x, y) => emitSquares(ps('minimalist'), x, y, '#888888', 5),
+    onUpdate: (ctx) => { ps('minimalist').update(ctx); },
   },
 
   neon: {
@@ -128,6 +153,12 @@ export const THEMES: Record<ThemeId, GameTheme> = {
     overlayText: '#ff00ff',
     overlayFont: 'bold 56px monospace',
     scanlines: false,
+    onBallScore: (_ctx, x, y) => {
+      emitShockwave(ps('neon'), x, y, '#ff00ff');
+      emitShockwave(ps('neon'), x, y, '#00ffff');
+    },
+    onBallHit: (_ctx, x, y) => emitShockwave(ps('neon'), x, y, '#ffffff'),
+    onUpdate: (ctx) => { ps('neon').update(ctx); },
   },
 
   pastel: {
@@ -152,6 +183,9 @@ export const THEMES: Record<ThemeId, GameTheme> = {
     overlayText: '#7c3aed',
     overlayFont: 'bold 56px "Georgia", serif',
     scanlines: false,
+    onBallScore: (_ctx, x, y) => emitPetals(ps('pastel'), x, y, 24),
+    onBallHit:   (_ctx, x, y) => emitPetals(ps('pastel'), x, y, 6),
+    onUpdate: (ctx) => { ps('pastel').update(ctx); },
   },
 };
 

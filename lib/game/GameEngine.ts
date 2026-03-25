@@ -227,6 +227,8 @@ export class GameEngine {
         const wallLeft = bodyA.label === 'wallLeft' || bodyB.label === 'wallLeft' ? bodyA.label === 'wallLeft' ? bodyA : bodyB : null;
         const wallRight = bodyA.label === 'wallRight' || bodyB.label === 'wallRight' ? bodyA.label === 'wallRight' ? bodyA : bodyB : null;
         const bonus = this.bonuses.find((b) => b.body === bodyA || b.body === bodyB);
+        const isPaddle = bodyA.label === 'paddleLeft' || bodyA.label === 'paddleRight' ||
+                         bodyB.label === 'paddleLeft' || bodyB.label === 'paddleRight';
 
         if (ball && wallLeft) {
           this.handleScore('right', ball);
@@ -235,6 +237,9 @@ export class GameEngine {
         } else if (ball && bonus) {
           this.applyBonus(bonus.type);
           this.removeBonus(bonus);
+        } else if (ball && isPaddle) {
+          // paddle hit effect
+          this.theme.onBallHit?.(this.ctx, ball.position.x, ball.position.y);
         }
       }
     });
@@ -242,6 +247,9 @@ export class GameEngine {
 
   private handleScore(scorer: 'left' | 'right', ball: Matter.Body) {
     this.score[scorer]++;
+
+    // Fire score explosion effect at the ball's last position
+    this.theme.onBallScore?.(this.ctx, ball.position.x, ball.position.y);
 
     Matter.Composite.remove(this.engine.world, ball);
     this.balls = this.balls.filter((b) => b !== ball);
@@ -597,6 +605,9 @@ export class GameEngine {
         CANVAS_HEIGHT / 2 + 46
       );
     }
+
+    // Theme particle / effect layer — drawn on top of everything
+    this.theme.onUpdate?.(ctx);
   }
 
   private drawRoundedRect(body: Matter.Body, color: string) {
