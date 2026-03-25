@@ -26,13 +26,15 @@ export class ParticleSystem {
       p.y += p.vy;
       p.vy += 0.12; // gravity
       p.life -= p.decay;
+      if (p.life <= 0) continue;
       if (p.draw) {
         p.draw(ctx, p);
       } else {
-        ctx.globalAlpha = Math.max(0, p.life);
+        const radius = Math.max(0, p.size * p.life);
+        ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
@@ -87,7 +89,8 @@ export function emitPixels(ps: ParticleSystem, x: number, y: number, color: stri
       size: sz,
       color,
       draw(ctx, p) {
-        ctx.globalAlpha = Math.max(0, p.life);
+        if (p.life <= 0) return;
+        ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
         ctx.shadowBlur = 8;
         ctx.shadowColor = p.color;
@@ -109,10 +112,11 @@ export function emitShockwave(ps: ParticleSystem, x: number, y: number, color: s
     size: 0, // used as radius growth tracker via life
     color,
     draw(ctx, p) {
-      const radius = (1 - p.life) * 80 + 10;
-      ctx.globalAlpha = Math.max(0, p.life * 0.8);
+      if (p.life <= 0) return;
+      const radius = Math.max(0, (1 - p.life) * 80 + 10);
+      ctx.globalAlpha = p.life * 0.8;
       ctx.strokeStyle = p.color;
-      ctx.lineWidth = 3 * p.life;
+      ctx.lineWidth = Math.max(0, 3 * p.life);
       ctx.shadowBlur = 20;
       ctx.shadowColor = p.color;
       ctx.beginPath();
@@ -151,15 +155,16 @@ export function emitPetals(ps: ParticleSystem, x: number, y: number, count = 18)
       size: rand(4, 9),
       color: colors[randInt(0, colors.length - 1)],
       draw(ctx, p) {
-        ctx.globalAlpha = Math.max(0, p.life * 0.85);
+        if (p.life <= 0) return;
+        const r = Math.max(0, p.size * p.life);
+        ctx.globalAlpha = p.life * 0.85;
         ctx.fillStyle = p.color;
-        // petal = slightly elongated oval
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.vx * 0.3);
         ctx.scale(1, 1.5);
         ctx.beginPath();
-        ctx.arc(0, 0, p.size * p.life, 0, Math.PI * 2);
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         ctx.globalAlpha = 1;
@@ -182,9 +187,10 @@ export function emitSquares(ps: ParticleSystem, x: number, y: number, color: str
       size: sz,
       color,
       draw(ctx, p) {
-        ctx.globalAlpha = Math.max(0, p.life);
+        if (p.life <= 0) return;
+        const s = Math.max(0, p.size * p.life);
+        ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
-        const s = p.size * p.life;
         ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
         ctx.globalAlpha = 1;
       },
