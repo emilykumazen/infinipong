@@ -2,8 +2,6 @@ import Matter from 'matter-js';
 import { GameConfig, GameState, GameStatus } from '@/types/game';
 import { GameTheme, THEMES, DEFAULT_THEME_ID } from './themes';
 import {
-  CANVAS_WIDTH,
-  CANVAS_HEIGHT,
   PADDLE_WIDTH,
   PADDLE_HEIGHT,
   BALL_RADIUS,
@@ -11,6 +9,7 @@ import {
   INITIAL_BALL_SPEED,
   WALL_THICKNESS,
   WINNING_SCORE,
+  SCORE_BAR_HEIGHT,
 } from './constants';
 
 type BonusType = 'extraBall' | 'bigPaddle' | 'shrinkPaddle' | 'speedUp' | 'slowDown';
@@ -43,6 +42,13 @@ export class GameEngine {
   private config: GameConfig;
   private theme: GameTheme;
   private onStateChange: (state: GameState) => void;
+
+  // Dynamic dimensions — read from the canvas element every frame
+  private get W() { return this.canvas.width; }
+  private get H() { return this.canvas.height; }
+  // Play area starts below the score bar
+  private get playTop() { return SCORE_BAR_HEIGHT; }
+  private get playH() { return this.H - SCORE_BAR_HEIGHT; }
 
   private engine: Matter.Engine;
   private paddles: { left: Matter.Body; right: Matter.Body };
@@ -98,32 +104,33 @@ export class GameEngine {
   }
 
   private setupWalls() {
+    const W = this.W, H = this.H;
     const wallTop = Matter.Bodies.rectangle(
-      CANVAS_WIDTH / 2,
-      -WALL_THICKNESS / 2,
-      CANVAS_WIDTH,
+      W / 2,
+      this.playTop - WALL_THICKNESS / 2,
+      W,
       WALL_THICKNESS,
       { isStatic: true, label: 'wallTop' }
     );
     const wallBottom = Matter.Bodies.rectangle(
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT + WALL_THICKNESS / 2,
-      CANVAS_WIDTH,
+      W / 2,
+      H + WALL_THICKNESS / 2,
+      W,
       WALL_THICKNESS,
       { isStatic: true, label: 'wallBottom' }
     );
     const wallLeft = Matter.Bodies.rectangle(
       -WALL_THICKNESS / 2,
-      CANVAS_HEIGHT / 2,
+      H / 2,
       WALL_THICKNESS,
-      CANVAS_HEIGHT,
+      H,
       { isStatic: true, isSensor: true, label: 'wallLeft' }
     );
     const wallRight = Matter.Bodies.rectangle(
-      CANVAS_WIDTH + WALL_THICKNESS / 2,
-      CANVAS_HEIGHT / 2,
+      W + WALL_THICKNESS / 2,
+      H / 2,
       WALL_THICKNESS,
-      CANVAS_HEIGHT,
+      H,
       { isStatic: true, isSensor: true, label: 'wallRight' }
     );
 
@@ -131,9 +138,11 @@ export class GameEngine {
   }
 
   private createPaddles() {
+    const W = this.W, H = this.H;
+    const midY = this.playTop + this.playH / 2;
     const leftPaddle = Matter.Bodies.rectangle(
       40,
-      CANVAS_HEIGHT / 2,
+      midY,
       PADDLE_WIDTH,
       this.paddleHeight,
       {
@@ -144,8 +153,8 @@ export class GameEngine {
       }
     );
     const rightPaddle = Matter.Bodies.rectangle(
-      CANVAS_WIDTH - 40,
-      CANVAS_HEIGHT / 2,
+      W - 40,
+      midY,
       PADDLE_WIDTH,
       this.paddleHeight,
       {
@@ -172,8 +181,8 @@ export class GameEngine {
   }
 
   private spawnBall(index?: number) {
-    const x = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 100;
-    const y = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 100;
+    const x = this.W / 2 + (Math.random() - 0.5) * 100;
+    const y = this.playTop + this.playH / 2 + (Math.random() - 0.5) * 100;
 
     const angle = (Math.random() - 0.5) * Math.PI / 3;
     const direction = Math.random() > 0.5 ? 1 : -1;
@@ -197,10 +206,11 @@ export class GameEngine {
     if (!this.isRuleEnabled('obstacles')) return;
 
     const count = this.getRuleOption('obstacles', 'count') as number;
+    const W = this.W, playTop = this.playTop, playH = this.playH;
 
     for (let i = 0; i < count; i++) {
-      const x = 200 + Math.random() * 500;
-      const y = 100 + Math.random() * 400;
+      const x = W * 0.25 + Math.random() * W * 0.5;
+      const y = playTop + playH * 0.1 + Math.random() * playH * 0.8;
       const width = 40 + Math.random() * 40;
       const height = 40 + Math.random() * 40;
 
@@ -377,11 +387,11 @@ export class GameEngine {
     if (this.keys['w'] || this.keys['W']) leftDy -= PADDLE_SPEED;
     if (this.keys['s'] || this.keys['S']) leftDy += PADDLE_SPEED;
 
+    const topBound = this.playTop + this.paddleHeight / 2;
+    const botBound = this.H - this.paddleHeight / 2;
+
     const leftPaddle = this.paddles.left;
-    const leftY = Math.max(
-      this.paddleHeight / 2 + WALL_THICKNESS,
-      Math.min(CANVAS_HEIGHT - this.paddleHeight / 2 - WALL_THICKNESS, leftPaddle.position.y + leftDy)
-    );
+    const leftY = Math.max(topBound, Math.min(botBound, leftPaddle.position.y + leftDy));
     Matter.Body.setPosition(leftPaddle, { x: leftPaddle.position.x, y: leftY });
 
     let rightDy = 0;
@@ -389,10 +399,7 @@ export class GameEngine {
     if (this.keys['ArrowDown']) rightDy += PADDLE_SPEED;
 
     const rightPaddle = this.paddles.right;
-    const rightY = Math.max(
-      this.paddleHeight / 2 + WALL_THICKNESS,
-      Math.min(CANVAS_HEIGHT - this.paddleHeight / 2 - WALL_THICKNESS, rightPaddle.position.y + rightDy)
-    );
+    const rightY = Math.max(topBound, Math.min(botBound, rightPaddle.position.y + rightDy));
     Matter.Body.setPosition(rightPaddle, { x: rightPaddle.position.x, y: rightY });
   }
 
@@ -453,8 +460,8 @@ export class GameEngine {
     const types: BonusType[] = ['extraBall', 'bigPaddle', 'shrinkPaddle', 'speedUp', 'slowDown'];
     const type = types[Math.floor(Math.random() * types.length)];
 
-    const x = 200 + Math.random() * 500;
-    const y = 100 + Math.random() * 400;
+    const x = this.W * 0.25 + Math.random() * this.W * 0.5;
+    const y = this.playTop + this.playH * 0.1 + Math.random() * this.playH * 0.8;
 
     const body = Matter.Bodies.circle(x, y, 15, {
       isStatic: true,
@@ -470,10 +477,10 @@ export class GameEngine {
     if (!this.isRuleEnabled('warpWalls')) return;
 
     this.balls.forEach((ball) => {
-      if (ball.position.y <= -BALL_RADIUS) {
-        Matter.Body.setPosition(ball, { x: ball.position.x, y: CANVAS_HEIGHT + BALL_RADIUS - 1 });
-      } else if (ball.position.y >= CANVAS_HEIGHT + BALL_RADIUS) {
-        Matter.Body.setPosition(ball, { x: ball.position.x, y: -BALL_RADIUS + 1 });
+      if (ball.position.y <= this.playTop - BALL_RADIUS) {
+        Matter.Body.setPosition(ball, { x: ball.position.x, y: this.H + BALL_RADIUS - 1 });
+      } else if (ball.position.y >= this.H + BALL_RADIUS) {
+        Matter.Body.setPosition(ball, { x: ball.position.x, y: this.playTop - BALL_RADIUS + 1 });
       }
     });
   }
@@ -481,35 +488,37 @@ export class GameEngine {
   private render() {
     const ctx = this.ctx;
     const t = this.theme;
+    const W = this.W, H = this.H;
+    const scoreBarH = SCORE_BAR_HEIGHT;
 
     // Background
     ctx.fillStyle = t.bg;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, W, H);
 
-    // Walls
+    // Score bar background (top strip)
     ctx.fillStyle = t.wallColor;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_THICKNESS);
-    ctx.fillRect(0, CANVAS_HEIGHT - WALL_THICKNESS, CANVAS_WIDTH, WALL_THICKNESS);
+    ctx.fillRect(0, 0, W, scoreBarH);
 
     // Scanlines (retro effect)
     if (t.scanlines) {
-      for (let y = 0; y < CANVAS_HEIGHT; y += 4) {
+      for (let y = 0; y < H; y += 4) {
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.fillRect(0, y, CANVAS_WIDTH, 2);
+        ctx.fillRect(0, y, W, 2);
       }
     }
 
-    // Center line
+    // Center line (play area only)
     ctx.strokeStyle = t.centerLine;
     ctx.setLineDash([20, 20]);
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(CANVAS_WIDTH / 2, 0);
-    ctx.lineTo(CANVAS_WIDTH / 2, CANVAS_HEIGHT);
+    ctx.moveTo(W / 2, scoreBarH);
+    ctx.lineTo(W / 2, H);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Score
+    // Score — vertically centered in the score bar
+    const scoreMidY = scoreBarH / 2;
     ctx.fillStyle = t.scoreColor;
     ctx.font = t.scoreFont;
     ctx.textAlign = 'center';
@@ -518,8 +527,8 @@ export class GameEngine {
       ctx.shadowBlur = 10;
       ctx.shadowColor = t.scoreColor;
     }
-    ctx.fillText(this.score.left.toString(), CANVAS_WIDTH / 4, 70);
-    ctx.fillText(this.score.right.toString(), (CANVAS_WIDTH * 3) / 4, 70);
+    ctx.fillText(this.score.left.toString(), W / 4, scoreMidY);
+    ctx.fillText(this.score.right.toString(), (W * 3) / 4, scoreMidY);
     ctx.shadowBlur = 0;
 
     // Paddles
@@ -578,31 +587,31 @@ export class GameEngine {
     // Paused overlay
     if (this.status === 'paused') {
       ctx.fillStyle = t.overlayBg;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = t.overlayText;
       ctx.font = t.overlayFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
+      ctx.fillText('PAUSED', W / 2, H / 2 - 30);
       ctx.font = t.overlayFont.replace(/\d+px/, '24px').replace('bold ', '');
-      ctx.fillText('Press P to resume', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 28);
+      ctx.fillText('Press P to resume', W / 2, H / 2 + 28);
     }
 
     // Game over overlay
     if (this.status === 'gameover') {
       ctx.fillStyle = t.overlayBg;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = t.overlayText;
       ctx.font = t.overlayFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const winnerText = this.score.left >= WINNING_SCORE ? 'LEFT WINS!' : 'RIGHT WINS!';
-      ctx.fillText(winnerText, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
+      ctx.fillText(winnerText, W / 2, H / 2 - 30);
       ctx.font = t.overlayFont.replace(/\d+px/, '32px').replace('bold ', '');
       ctx.fillText(
         `${this.score.left} - ${this.score.right}`,
-        CANVAS_WIDTH / 2,
-        CANVAS_HEIGHT / 2 + 46
+        W / 2,
+        H / 2 + 46
       );
     }
 

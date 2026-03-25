@@ -8,8 +8,8 @@ export default function GamePage() {
   const themeId = useGameStore((s) => s.themeId);
 
   return (
-    <main className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center px-4 py-8">
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0a0a0f' }}>
       <GameCanvas config={config} themeId={themeId} />
-    </main>
+    </div>
   );
 }

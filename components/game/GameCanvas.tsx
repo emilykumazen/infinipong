@@ -1,10 +1,9 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { GameConfig } from '@/types/game';
-import { useGameEngine } from '@/hooks/useGameEngine';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/game/constants';
+import { SCORE_BAR_HEIGHT } from '@/lib/game/constants';
 
 interface GameCanvasProps {
   config: GameConfig;
@@ -13,69 +12,98 @@ interface GameCanvasProps {
 
 export function GameCanvas({ config, themeId }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { gameState, engineRef } = useGameEngine(canvasRef, config, themeId);
+  const engineRef = useRef<import('@/lib/game/GameEngine').GameEngine | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [status, setStatus] = useState<string>('playing');
+
+  // Resize canvas to fill the window
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+
+  // Start engine after canvas is sized
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let destroyed = false;
+
+    // Wait one frame so the resize has applied
+    const raf = requestAnimationFrame(() => {
+      if (destroyed) return;
+      import('@/lib/game/GameEngine').then(({ GameEngine }) => {
+        if (destroyed || !canvas) return;
+        const engine = new GameEngine(canvas, config, (state) => {
+          setStatus(state.status);
+          setIsPaused(state.status === 'paused');
+        }, themeId);
+        engineRef.current = engine;
+        engine.start();
+      });
+    });
+
+    return () => {
+      destroyed = true;
+      cancelAnimationFrame(raf);
+      engineRef.current?.destroy();
+      engineRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeId]);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* HUD bar */}
-      <div className="flex items-center justify-between w-full max-w-[900px] px-2">
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'block', position: 'absolute', top: 0, left: 0 }}
+      />
+
+      {/* HUD overlay — sits inside the score bar at the top */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: SCORE_BAR_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          pointerEvents: 'none',
+        }}
+      >
         <Link
           href="/"
+          style={{ pointerEvents: 'auto' }}
           className="text-slate-400 hover:text-white text-sm transition-colors"
         >
           ← Menu
         </Link>
+
         <div className="text-slate-400 text-xs">
-          {gameState.status === 'paused' && (
+          {status === 'paused' && (
             <span className="text-yellow-400 font-semibold">PAUSED</span>
           )}
-          {gameState.status === 'playing' && (
-            <span>P — pause</span>
-          )}
         </div>
+
         <button
           onClick={() => engineRef.current?.togglePause()}
+          style={{ pointerEvents: 'auto' }}
           className="text-slate-400 hover:text-white text-sm transition-colors"
         >
-          {gameState.status === 'paused' ? '▶ Resume' : '⏸ Pause'}
+          {isPaused ? '▶ Resume' : '⏸ Pause'}
         </button>
       </div>
-
-      {/* Canvas wrapper — scales down on narrow screens */}
-      <div
-        className="relative"
-        style={{
-          width: '100%',
-          maxWidth: CANVAS_WIDTH,
-        }}
-      >
-        <div
-          style={{
-            position: 'relative',
-            paddingBottom: `${(CANVAS_HEIGHT / CANVAS_WIDTH) * 100}%`,
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              borderRadius: '12px',
-              display: 'block',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Controls reminder */}
-      <p className="text-slate-500 text-xs">
-        W/S — Left paddle &nbsp;|&nbsp; ↑↓ — Right paddle &nbsp;|&nbsp; P — Pause
-      </p>
     </div>
   );
 }
