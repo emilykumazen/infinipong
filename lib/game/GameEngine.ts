@@ -1,5 +1,6 @@
 import Matter from 'matter-js';
 import { GameConfig, GameState, GameStatus } from '@/types/game';
+import { GameTheme, THEMES, DEFAULT_THEME_ID } from './themes';
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
@@ -40,6 +41,7 @@ export class GameEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private config: GameConfig;
+  private theme: GameTheme;
   private onStateChange: (state: GameState) => void;
 
   private engine: Matter.Engine;
@@ -62,13 +64,15 @@ export class GameEngine {
   constructor(
     canvas: HTMLCanvasElement,
     config: GameConfig,
-    onStateChange: (state: GameState) => void
+    onStateChange: (state: GameState) => void,
+    themeId?: string
   ) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get canvas context');
     this.ctx = ctx;
     this.config = config;
+    this.theme = THEMES[(themeId as keyof typeof THEMES) ?? DEFAULT_THEME_ID] ?? THEMES[DEFAULT_THEME_ID];
     this.onStateChange = onStateChange;
     this.paddleHeight = PADDLE_HEIGHT;
 
@@ -468,15 +472,27 @@ export class GameEngine {
 
   private render() {
     const ctx = this.ctx;
+    const t = this.theme;
 
-    ctx.fillStyle = '#0a0a0f';
+    // Background
+    ctx.fillStyle = t.bg;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    ctx.fillStyle = '#1e293b';
+    // Walls
+    ctx.fillStyle = t.wallColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_THICKNESS);
     ctx.fillRect(0, CANVAS_HEIGHT - WALL_THICKNESS, CANVAS_WIDTH, WALL_THICKNESS);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    // Scanlines (retro effect)
+    if (t.scanlines) {
+      for (let y = 0; y < CANVAS_HEIGHT; y += 4) {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(0, y, CANVAS_WIDTH, 2);
+      }
+    }
+
+    // Center line
+    ctx.strokeStyle = t.centerLine;
     ctx.setLineDash([20, 20]);
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -485,37 +501,56 @@ export class GameEngine {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = 'bold 48px monospace';
+    // Score
+    ctx.fillStyle = t.scoreColor;
+    ctx.font = t.scoreFont;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (t.id === 'retro') {
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = t.scoreColor;
+    }
     ctx.fillText(this.score.left.toString(), CANVAS_WIDTH / 4, 70);
     ctx.fillText(this.score.right.toString(), (CANVAS_WIDTH * 3) / 4, 70);
+    ctx.shadowBlur = 0;
 
-    this.drawRoundedRect(this.paddles.left, '#60a5fa');
-    this.drawRoundedRect(this.paddles.right, '#f87171');
+    // Paddles
+    if (t.paddleGlow) {
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = t.paddleGlow;
+    }
+    this.drawRoundedRect(this.paddles.left, t.leftPaddle);
+    this.drawRoundedRect(this.paddles.right, t.rightPaddle);
+    ctx.shadowBlur = 0;
 
+    // Balls
     this.balls.forEach((ball, i) => {
-      const hue = (i * 60) % 360;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = `hsl(${hue}, 70%, 50%)`;
-      ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+      ctx.shadowBlur = t.ballShadowBlur;
+      ctx.shadowColor = t.ballGlow(i);
+      ctx.fillStyle = t.ballFill(i);
       ctx.beginPath();
       ctx.arc(ball.position.x, ball.position.y, BALL_RADIUS, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
     });
 
+    // Obstacles
     this.obstacles.forEach((obs) => {
-      ctx.fillStyle = '#475569';
-      ctx.strokeStyle = '#64748b';
+      ctx.fillStyle = t.obstacleFill;
+      ctx.strokeStyle = t.obstacleStroke;
       ctx.lineWidth = 2;
+      if (t.id === 'retro') {
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = t.obstacleStroke;
+      }
       const width = obs.bounds.max.x - obs.bounds.min.x;
       const height = obs.bounds.max.y - obs.bounds.min.y;
       ctx.fillRect(obs.bounds.min.x, obs.bounds.min.y, width, height);
       ctx.strokeRect(obs.bounds.min.x, obs.bounds.min.y, width, height);
+      ctx.shadowBlur = 0;
     });
 
+    // Bonuses
     this.bonuses.forEach((bonus) => {
       ctx.fillStyle = BONUS_COLORS[bonus.type];
       ctx.shadowBlur = 10;
@@ -525,39 +560,41 @@ export class GameEngine {
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = t.id === 'minimalist' || t.id === 'pastel' ? '#000' : '#fff';
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(BONUS_SYMBOLS[bonus.type], bonus.body.position.x, bonus.body.position.y);
     });
 
+    // Paused overlay
     if (this.status === 'paused') {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillStyle = t.overlayBg;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 48px sans-serif';
+      ctx.fillStyle = t.overlayText;
+      ctx.font = t.overlayFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
-      ctx.font = '24px sans-serif';
-      ctx.fillText('Press P to resume', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+      ctx.font = t.overlayFont.replace(/\d+px/, '24px').replace('bold ', '');
+      ctx.fillText('Press P to resume', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 28);
     }
 
+    // Game over overlay
     if (this.status === 'gameover') {
-      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillStyle = t.overlayBg;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 56px sans-serif';
+      ctx.fillStyle = t.overlayText;
+      ctx.font = t.overlayFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const winnerText = this.score.left >= WINNING_SCORE ? 'LEFT WINS!' : 'RIGHT WINS!';
       ctx.fillText(winnerText, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
-      ctx.font = '32px sans-serif';
+      ctx.font = t.overlayFont.replace(/\d+px/, '32px').replace('bold ', '');
       ctx.fillText(
         `${this.score.left} - ${this.score.right}`,
         CANVAS_WIDTH / 2,
-        CANVAS_HEIGHT / 2 + 40
+        CANVAS_HEIGHT / 2 + 46
       );
     }
   }

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { RuleSelector } from '@/components/ui/RuleSelector';
+import { ThemeSelector } from '@/components/ui/ThemeSelector';
 
 export default function Home() {
   const router = useRouter();
@@ -17,6 +18,11 @@ export default function Home() {
         <p className="text-slate-400 text-lg">
           Pong, but with rules. Lots of rules.
         </p>
+      </div>
+
+      {/* Theme Selector */}
+      <div className="w-full max-w-3xl mb-8">
+        <ThemeSelector />
       </div>
 
       {/* Rule Selector */}

@@ -5,7 +5,8 @@ import { GameConfig, GameState } from '@/types/game';
 
 export function useGameEngine(
   canvasRef: RefObject<HTMLCanvasElement | null>,
-  config: GameConfig
+  config: GameConfig,
+  themeId?: string
 ) {
   const [gameState, setGameState] = useState<GameState>({
     status: 'idle',
@@ -24,7 +25,7 @@ export function useGameEngine(
       if (destroyed || !canvas) return;
       const engine = new GameEngine(canvas, config, (state) => {
         setGameState(state);
-      });
+      }, themeId);
       engineRef.current = engine;
       engine.start();
     });
@@ -35,7 +36,7 @@ export function useGameEngine(
       engineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasRef]);
+  }, [canvasRef, themeId]);
 
   return { gameState, engineRef };
 }

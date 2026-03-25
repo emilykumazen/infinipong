@@ -8,11 +8,12 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/game/constants';
 
 interface GameCanvasProps {
   config: GameConfig;
+  themeId?: string;
 }
 
-export function GameCanvas({ config }: GameCanvasProps) {
+export function GameCanvas({ config, themeId }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { gameState, engineRef } = useGameEngine(canvasRef, config);
+  const { gameState, engineRef } = useGameEngine(canvasRef, config, themeId);
 
   return (
     <div className="flex flex-col items-center gap-4">
